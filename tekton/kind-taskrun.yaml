@@ -1,0 +1,14 @@
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  generateName: kind-cluster-run-
+spec:
+  taskRef:
+    name: kind-cluster
+  podTemplate:
+    volumes:
+    - name: varlibdocker
+      emptyDir: {}
+    - name: libmodules
+      hostPath:
+        path: /lib/modules

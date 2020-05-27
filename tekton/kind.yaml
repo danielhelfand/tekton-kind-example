@@ -1,0 +1,79 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kind-cluster
+spec:
+  steps:
+  - name: create-cluster
+    image: jieyu/kind-cluster-buster:v0.1.0
+    script: |
+      #!/bin/bash
+      set -o errexit
+      set -o nounset
+      set -o pipefail
+      
+      cd ..
+
+      # Startup Docker daemon and wait for it to be ready.
+      /entrypoint-original.sh bash -c "touch /dockerd-ready && sleep infinity" &
+      while [ ! -f /dockerd-ready ]; do sleep 1; done
+
+      echo "Setting up KIND cluster"
+
+      # Startup a KIND cluster.
+      API_SERVER_ADDRESS=${API_SERVER_ADDRESS:-"127.0.0.1"}
+      sed -i "s/apiServerAddress:$/apiServerAddress: ${API_SERVER_ADDRESS}/" kind-config.yaml
+
+      CERT_SANS=(${CERT_SANS:-""})
+      CERT_SANS+=(${API_SERVER_ADDRESS})
+      CERT_SANS+=($(hostname -i))
+      CERT_SANS+=(localhost)
+      CERT_SANS+=(127.0.0.1)
+
+      UNIQUE_CERT_SANS=($(echo "${CERT_SANS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+      for hostname in "${UNIQUE_CERT_SANS[@]}"; do
+      cat <<EOF >> kind-config.yaml
+      - group: kubeadm.k8s.io
+        version: v1beta2
+        kind: ClusterConfiguration
+        patch: |
+          - op: add
+            path: /apiServer/certSANs/-
+            value: ${hostname}
+      EOF
+      done
+
+      kind create cluster --config=kind-config.yaml --image=${KIND_NODE_IMAGE-"jieyu/kind-node:v1.17.0"} --wait=900s
+
+      exec "$@"
+    imagePullPolicy: Always
+    stdin: true
+    tty: true
+    env:
+    - name: API_SERVER_ADDRESS
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    volumeMounts:
+    - mountPath: /var/lib/docker
+      name: varlibdocker
+    - mountPath: /lib/modules
+      name: libmodules
+      readOnly: true
+    securityContext:
+      privileged: true
+    ports:
+    - containerPort: 30001
+      name: api-server-port
+      protocol: TCP
+    readinessProbe:
+      failureThreshold: 15
+      httpGet:
+        path: /healthz
+        port: api-server-port
+        scheme: HTTPS
+      initialDelaySeconds: 120
+      periodSeconds: 20
+      successThreshold: 1
+      timeoutSeconds: 1

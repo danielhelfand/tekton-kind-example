@@ -16,13 +16,13 @@ of using KIND with Tekton for integration testing.
 Create the Task to create a KIND cluster:
 
 ```
-kubectl apply -f /tekton/kind.yaml
+kubectl apply -f https://raw.githubusercontent.com/danielhelfand/tekton-kind-example/master/tekton/kind.yaml
 ```
 
 Create the TaskRun to execute the Task:
 
 ```
-kubectl create -f /tekton/kind-taskrun.yaml
+kubectl create -f https://raw.githubusercontent.com/danielhelfand/tekton-kind-example/master/tekton/kind-taskrun.yaml
 ```
 
 View TaskRun logs:
